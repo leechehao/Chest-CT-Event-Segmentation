@@ -1,0 +1,37 @@
+dataset:
+  _target_: winlp.task.token_classification.TokenClassificationDataModule
+  batch_size: 4
+  dataset_name:
+  - ./chest_ct_segment_event/program_data/chest_ct_segment_event
+  label_all_tokens: false
+  label_column_name: ner_tags
+  max_length: 512
+  num_workers: null
+  pretrained_model_name_or_path: microsoft/deberta-v3-base
+seed: 1314
+task:
+  _target_: winlp.task.token_classification.TokenClassificationModule
+  label_all_tokens: false
+  learning_rate: 0.0001
+  mode: max
+  monitor: val_f1
+  pretrained_model_name_or_path: microsoft/deberta-v3-base
+  warmup_ratio: 0.1
+  weight_decay: 0.01
+test: true
+trainer:
+  _target_: lightning.pytorch.Trainer
+  accelerator: auto
+  deterministic: true
+  devices: auto
+  logger:
+    _target_: lightning.pytorch.loggers.MLFlowLogger
+    experiment_name: Chest_CT_Segment_Event
+    run_name: run_1
+    tracking_uri: http://192.168.1.76:9527
+  max_epochs: 20
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
