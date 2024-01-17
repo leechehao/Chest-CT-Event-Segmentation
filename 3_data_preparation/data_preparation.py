@@ -6,6 +6,7 @@ import random
 import json
 
 import numpy as np
+import pandas as pd
 
 
 class TextInfo:
@@ -47,56 +48,6 @@ def extract_annotation_info(json_data: list[dict], field_name: str) -> list[Text
     return label_data
 
 
-def segment_ligatures_by_ent(label_data: list[TextInfo]) -> None:
-    for label in label_data:
-        for ent in label.ents:
-            ent_info = TextInfo(text=ent[0], point=ent[1])
-            for i in range(len(ent_info.starts)):  # entity 中的 word index(i)
-                for j, (start, end) in enumerate(zip(label.starts, label.ends)):  # example 中的 word index(j)
-                    if start == ent_info.starts[i] and ent_info.ends[i] < end:
-                        # example   -> Massat lung . [(0, 6), (7, 11), (12, 13)]
-                        # ent       -> Mass (0, 4)
-                        # condition -> 0 == 0 and 4 < 6
-                        # result    -> (0, 6) => (0, 4), (4, 6)
-                        label.starts[j] = ent_info.ends[i]
-                        label.ends[j] = end
-                        label.starts.insert(j, start)
-                        label.ends.insert(j, ent_info.ends[i])
-                        break
-                    elif start < ent_info.starts[i] and ent_info.ends[i] == end:
-                        # example   -> Mass atlung . [(0, 4), (5, 11), (12, 13)]
-                        # ent       -> lung (7, 11)
-                        # condition -> 5 < 7 and 11 == 11
-                        # result    -> (5, 11) => (5, 7), (7, 11)
-                        label.starts[j] = ent_info.starts[i]
-                        label.ends[j] = end
-                        label.starts.insert(j, start)
-                        label.ends.insert(j, ent_info.starts[i])
-                        break
-                    elif start < ent_info.starts[i] and ent_info.ends[i] < end:
-                        # example   -> Mass atlung. [(0, 4), (5, 12)]
-                        # ent       -> lung (7, 11)
-                        # condition -> 5 < 7 and 11 < 12
-                        # result    -> (5, 12) => (5, 7), (7, 11), (11, 12)
-                        label.starts[j] = ent_info.ends[i]
-                        label.ends[j] = end
-                        label.starts.insert(j, ent_info.starts[i])
-                        label.ends.insert(j, ent_info.ends[i])
-                        label.starts.insert(j, start)
-                        label.ends.insert(j, ent_info.starts[i])
-
-
-def tag_BIO(label_data: list[TextInfo]) -> None:
-    for label in label_data:
-        label.create_tags()
-        for ent in label.ents:
-            ent_info = TextInfo(text=ent[0], point=ent[1])
-            for i in range(len(ent_info.starts)):
-                for j, (start, end) in enumerate(zip(label.starts, label.ends)):
-                    if start == ent_info.starts[i] and ent_info.ends[i] == end:
-                        label.tags[j] = f"B-{ent[3]}" if i == 0 else f"I-{ent[3]}"
-
-
 def train_test_split(*arrays, test_size: float = 0.25):
     if len(arrays) == 0:
         raise ValueError("At least one array required as input")
@@ -124,20 +75,24 @@ def train_test_split(*arrays, test_size: float = 0.25):
     return result
 
 
-def write_content(split_data: list[TextInfo]) -> str | set[str]:
-    file_content = ""
+def convert_to_feature_data(label_data) -> list[tuple[str, str, str]]:
+    feature_data = []
+    for label in label_data:
+        indices = []
+        labels = []
+        for ent in sorted(label.ents, key=lambda x: x[1]):
+            indices.append(ent[1])
+            labels.append(ent[3])
+        feature_data.append((label.text, str(indices), str(labels)))
+    return feature_data
+
+
+def collect_tags(data) -> set[str]:
     tag_set = set()
-    for label in split_data:
-        for start, end, tag in zip(label.starts, label.ends, label.tags):
-            tag_set.add(tag.split("-")[-1])
-            file_content += f"{label.text[start:end]} {tag}\n"
-        file_content += "\n"
-    return file_content, tag_set
-
-
-def write_file(file_path: str, content: str) -> None:
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(content)
+    for example in data:
+        for tag in eval(example[2]):
+            tag_set.add(tag)
+    return tag_set
 
 
 def main():
@@ -150,31 +105,35 @@ def main():
 
     random.seed(args.seed)
 
+    if os.path.exists(args.output_dir):
+        raise FileExistsError(f"The folder '{args.output_dir}' already exists!")
+
     with open(args.input_file) as f:
         json_data = json.load(f)
 
     label_data = extract_annotation_info(json_data, args.field_name)
-    segment_ligatures_by_ent(label_data)
-    tag_BIO(label_data)
+    feature_data = convert_to_feature_data(label_data)
 
-    train_data, test_data = train_test_split(label_data, test_size=0.2)
+    train_data, test_data = train_test_split(feature_data, test_size=0.2)
     train_data, validation_data = train_test_split(train_data, test_size=0.125)
 
-    if os.path.exists(args.output_dir):
-        raise FileExistsError(f"The folder '{args.output_dir}' already exists!")
-
-    train_content, train_tag_set = write_content(train_data)
-    validation_content, validation_tag_set = write_content(validation_data)
-    test_content, test_tag_set = write_content(test_data)
+    train_tag_set = collect_tags(train_data)
+    validation_tag_set = collect_tags(validation_data)
+    test_tag_set = collect_tags(test_data)
 
     if validation_tag_set > train_tag_set or test_tag_set > train_tag_set:
         raise ValueError(f"The labels in the training data do not include those found in the validation and test data.")
 
     data_dir = f"{args.output_dir}/data"
     os.makedirs(data_dir)
-    write_file(f"{data_dir}/train.conll", train_content)
-    write_file(f"{data_dir}/validation.conll", validation_content)
-    write_file(f"{data_dir}/test.conll", test_content)
+
+    df_train = pd.DataFrame(train_data, columns=["Text", "Indices", "Tags"])
+    df_validation = pd.DataFrame(validation_data, columns=["Text", "Indices", "Tags"])
+    df_test = pd.DataFrame(test_data, columns=["Text", "Indices", "Tags"])
+
+    df_train.to_csv(f"{data_dir}/train.csv", encoding="utf-8", index=False)
+    df_validation.to_csv(f"{data_dir}/validation.csv", encoding="utf-8", index=False)
+    df_test.to_csv(f"{data_dir}/test.csv", encoding="utf-8", index=False)
 
 
 if __name__ == '__main__':
