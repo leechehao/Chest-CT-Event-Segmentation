@@ -1,3 +1,3 @@
 #!/bin/bash
 
-winlp-train +experiment=token_classification/chest_ct_event_1
+winlp-train +experiment=token_classification/boundary_detection/chest_ct_event_1
