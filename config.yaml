@@ -1,17 +1,28 @@
+defaults:
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+  - _self_
+
 dataset:
-  _target_: winlp.task.token_classification.TokenClassificationDataModule
+  _target_: winlp.task.token_classification.boundary_detection.BoundaryDetectionDataModule
   batch_size: 4
   dataset_name:
-  - ./chest_ct_segment_event/program_data/chest_ct_segment_event
-  label_all_tokens: false
-  label_column_name: ner_tags
+  - /home/bryant/Chest-CT-Segment-Event/chest_ct_event/program_data/chest_ct_event_2024-01-16-08-15
+  indices_column_name: Indices
+  label_column_name: Tags
+  label_list:
+  - O
+  - COMP
+  - FIND
+  - IMP
+  - EVENT
+  - Others
   max_length: 512
   num_workers: null
   pretrained_model_name_or_path: microsoft/deberta-v3-base
 seed: 1314
 task:
-  _target_: winlp.task.token_classification.TokenClassificationModule
-  label_all_tokens: false
+  _target_: winlp.task.token_classification.boundary_detection.BoundaryDetectionModule
   learning_rate: 0.0001
   mode: max
   monitor: val_f1
@@ -26,7 +37,7 @@ trainer:
   devices: auto
   logger:
     _target_: lightning.pytorch.loggers.MLFlowLogger
-    experiment_name: Chest_CT_Segment_Event
+    experiment_name: Chest_CT_Event
     run_name: run_1
     tracking_uri: http://192.168.1.76:9527
   max_epochs: 20
