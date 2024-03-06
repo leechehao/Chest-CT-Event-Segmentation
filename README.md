@@ -2,7 +2,7 @@
 針對 Chest CT 影像文字報告，訓練模型檢測臨床發現事件的邊界。
 
 ## 訓練模型
-訓練模型的程式碼是使用自己開發的 [winlp](https://github.com/leechehao/MyMLOps) 套件，它主要結合了 PyTorch Lightning 和 Hydra 的強大功能。
+訓練模型的程式碼是使用自己開發的 [haonlp](https://github.com/leechehao/HaoNLP.git) 套件，它主要結合了 PyTorch Lightning 和 Hydra 的強大功能。
 
 ## Inference
 ```bash
